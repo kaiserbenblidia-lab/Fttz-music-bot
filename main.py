@@ -1,57 +1,52 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 import yt_dlp
-import os
 
 TOKEN = "PUT_YOUR_TOKEN_HERE"
 
-# تحميل الأغنية
-def download_song(query):
+# البحث فقط بدون تحميل
+def search_youtube(query):
     ydl_opts = {
-        'format': 'bestaudio/best',
         'quiet': True,
-        'outtmpl': 'song.%(ext)s',
+        'skip_download': True
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(f"ytsearch:{query}", download=True)
+        info = ydl.extract_info(f"ytsearch:{query}", download=False)
         video = info['entries'][0]
-        file_name = ydl.prepare_filename(video)
-        return file_name, video['title'], video['webpage_url']
+        return video['title'], video['webpage_url']
 
-# التعامل مع الرسائل
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if text.startswith("!"):
         song_name = text.replace("!", "")
 
-        msg = await update.message.reply_text("⏳ جاري تحميل الأغنية...")
+        await update.message.reply_text("🔍 جاري البحث...")
 
         try:
-            file_path, title, url = download_song(song_name)
+            title, url = search_youtube(song_name)
 
-            # زر يوتيوب
             keyboard = [
                 [InlineKeyboardButton("▶️ فتح في يوتيوب", url=url)]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
-            # إرسال الصوت
-            with open(file_path, 'rb') as audio:
-                await update.message.reply_audio(
-                    audio=audio,
-                    title=title,
-                    reply_markup=reply_markup
-                )
+            # إرسال الرابط (تيليجرام يحوله لمشغل)
+            await update.message.reply_text(
+                f"🎵 {title}\n{url}",
+                reply_markup=reply_markup,
+                disable_web_page_preview=False  # مهم عشان يظهر المشغل
+            )
 
-            await msg.delete()
+        except:
+            await update.message.reply_text("❌ ما حصلت الأغنية")
 
-            # حذف الملف بعد الإرسال
-            os.remove(file_path)
+    elif text == "!العاب":
+        await update.message.reply_text("🎮 جرب:\n- !اسئلني\n- قريبًا ألعاب أكثر 😄")
 
-        except Exception as e:
-            await update.message.reply_text("❌ صار خطأ أثناء تحميل الأغنية")
+    elif text == "!اسئلني":
+        await update.message.reply_text("❓ وش أكثر شيء تحبه في يومك؟")
 
     else:
         await update.message.reply_text("اكتب !اسم_الأغنية 🎧")
