@@ -1,40 +1,70 @@
-import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
 import yt_dlp
 
-TOKEN = os.getenv("TOKEN")
+TOKEN = "حط_توكنك"
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("اهلا 👋 اكتب /play اسم الاغنية")
+# تخزين أوامر لكل قروب
+group_prefix = {}
 
-async def play(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = " ".join(context.args)
-
-    if not query:
-        await update.message.reply_text("اكتب اسم الاغنية بعد /play")
+async def setprefix(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.chat.type not in ["group", "supergroup"]:
+        await update.message.reply_text("هذا الأمر للجروبات فقط")
         return
 
-    await update.message.reply_text(f"🔎 جاري البحث عن: {query}")
+    if not context.args:
+        await update.message.reply_text("اكتب البادئة الجديدة مثل: /setprefix !")
+        return
+
+    prefix = context.args[0]
+    group_prefix[update.message.chat.id] = prefix
+
+    await update.message.reply_text(f"تم تغيير الأمر إلى: {prefix}")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat.id
+    text = update.message.text
+
+    prefix = group_prefix.get(chat_id, "!")
+
+    if not text.startswith(prefix):
+        return
+
+    query = text.replace(prefix, "").strip()
+
+    if not query:
+        return
+
+    await update.message.reply_text("🔎 جاري البحث...")
 
     ydl_opts = {
-        'format': 'bestaudio',
-        'quiet': True
+        'quiet': True,
+        'format': 'bestaudio'
     }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch:{query}", download=False)
-            url = info['entries'][0]['webpage_url']
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(f"ytsearch:{query}", download=False)
+        video = info['entries'][0]
 
-        await update.message.reply_text(f"🎵 لقيت:\n{url}")
+        title = video['title']
+        url = video['webpage_url']
+        thumb = video['thumbnail']
 
-    except:
-        await update.message.reply_text("❌ صار خطأ، جرّب اسم ثاني")
+    keyboard = [
+        [InlineKeyboardButton("▶️ مشاهدة على يوتيوب", url=url)]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_photo(
+        photo=thumb,
+        caption=f"🎵 {title}",
+        reply_markup=reply_markup
+    )
 
 app = ApplicationBuilder().token(TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("play", play))
+app.add_handler(CommandHandler("setprefix", setprefix))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 app.run_polling()
